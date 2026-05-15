@@ -306,6 +306,25 @@ function AuthPage({ onLogin, message, setMessage }) {
             <>
               <label>
                 Name
+                <div>
+  <label>Admin Username</label>
+  <input
+    type="text"
+    value={adminUsername}
+    onChange={(e) => setAdminUsername(e.target.value)}
+    required
+  />
+</div>
+
+<div>
+  <label>Admin Password</label>
+  <input
+    type="password"
+    value={adminPassword}
+    onChange={(e) => setAdminPassword(e.target.value)}
+    required
+  />
+</div>
                 <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
               </label>
               <label>
