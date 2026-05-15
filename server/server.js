@@ -73,9 +73,23 @@ const taskSchema = new mongoose.Schema(
 
 taskSchema.index({ dueDate: 1, status: 1 });
 
+const otpSchema = new mongoose.Schema(
+  {
+    email: { type: String, required: true, lowercase: true, trim: true },
+    otpHash: { type: String, required: true },
+    attempts: { type: Number, default: 0 },
+    used: { type: Boolean, default: false },
+    expiresAt: { type: Date, required: true }
+  },
+  { timestamps: true }
+);
+
+otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
 const User = mongoose.model("User", userSchema);
 const Project = mongoose.model("Project", projectSchema);
 const Task = mongoose.model("Task", taskSchema);
+const LoginOtp = mongoose.model("LoginOtp", otpSchema);
 
 const signupSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters"),
@@ -87,6 +101,15 @@ const signupSchema = z.object({
 const loginSchema = z.object({
   email: z.string().trim().email("Enter a valid email"),
   password: z.string().min(1, "Password is required")
+});
+
+const requestOtpSchema = z.object({
+  email: z.string().trim().email("Enter a valid email")
+});
+
+const verifyOtpSchema = z.object({
+  email: z.string().trim().email("Enter a valid email"),
+  otp: z.string().trim().regex(/^\d{6}$/, "OTP must be 6 digits")
 });
 
 const projectInput = z.object({
@@ -108,6 +131,38 @@ const taskInput = z.object({
 
 function tokenFor(user) {
   return jwt.sign({ id: user._id, role: user.role }, jwtSecret, { expiresIn: "7d" });
+}
+
+function generateOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function sendOtpEmail(email, otp) {
+  if (!process.env.RESEND_API_KEY || !process.env.OTP_FROM_EMAIL) {
+    return false;
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: process.env.OTP_FROM_EMAIL,
+      to: email,
+      subject: "Your Team Task Manager OTP",
+      html: `<p>Your login OTP is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes.</p>`
+    })
+  });
+
+  if (!response.ok) {
+    const error = new Error("Could not send OTP email");
+    error.status = 502;
+    throw error;
+  }
+
+  return true;
 }
 
 function asyncHandler(handler) {
@@ -227,6 +282,71 @@ app.post(
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
+    return res.json({ token: tokenFor(user), user: user.safe() });
+  })
+);
+
+app.post(
+  "/api/auth/request-otp",
+  asyncHandler(async (req, res) => {
+    const data = requestOtpSchema.parse(req.body);
+    const email = data.email.toLowerCase();
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "No account found. Please sign up first." });
+    }
+
+    const otp = generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    await LoginOtp.deleteMany({ email, used: false });
+    await LoginOtp.create({
+      email,
+      otpHash,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+    });
+
+    const sentByEmail = await sendOtpEmail(email, otp);
+    return res.json({
+      message: sentByEmail ? "OTP sent to your email." : "Demo OTP generated.",
+      demoOtp: sentByEmail ? undefined : otp
+    });
+  })
+);
+
+app.post(
+  "/api/auth/verify-otp",
+  asyncHandler(async (req, res) => {
+    const data = verifyOtpSchema.parse(req.body);
+    const email = data.email.toLowerCase();
+    const otpRecord = await LoginOtp.findOne({
+      email,
+      used: false,
+      expiresAt: { $gt: new Date() }
+    }).sort({ createdAt: -1 });
+
+    if (!otpRecord) {
+      return res.status(401).json({ message: "OTP expired. Please request a new OTP." });
+    }
+
+    if (otpRecord.attempts >= 5) {
+      otpRecord.used = true;
+      await otpRecord.save();
+      return res.status(429).json({ message: "Too many OTP attempts. Request a new OTP." });
+    }
+
+    const matches = await bcrypt.compare(data.otp, otpRecord.otpHash);
+    if (!matches) {
+      otpRecord.attempts += 1;
+      await otpRecord.save();
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "Account not found" });
+
+    otpRecord.used = true;
+    await otpRecord.save();
     return res.json({ token: tokenFor(user), user: user.safe() });
   })
 );

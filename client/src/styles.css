@@ -76,7 +76,7 @@ button {
 
 .segmented {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   background: #eef2f6;
   border-radius: 8px;
   padding: 4px;

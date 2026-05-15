@@ -234,6 +234,8 @@ export default function App() {
 
 function AuthPage({ onLogin, message, setMessage }) {
   const [mode, setMode] = useState("login");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -245,6 +247,26 @@ function AuthPage({ onLogin, message, setMessage }) {
     event.preventDefault();
     setMessage("");
     try {
+      if (mode === "otp" && !otpSent) {
+        const data = await api("/auth/request-otp", {
+          method: "POST",
+          body: { email: form.email }
+        });
+        setOtpSent(true);
+        setMessage(data.demoOtp ? `Demo OTP: ${data.demoOtp}` : data.message);
+        return;
+      }
+
+      if (mode === "otp") {
+        const data = await api("/auth/verify-otp", {
+          method: "POST",
+          body: { email: form.email, otp: otpCode }
+        });
+        setToken(data.token);
+        await onLogin();
+        return;
+      }
+
       const data = await api(mode === "login" ? "/auth/login" : "/auth/signup", {
         method: "POST",
         body: mode === "login" ? { email: form.email, password: form.password } : form
@@ -267,11 +289,14 @@ function AuthPage({ onLogin, message, setMessage }) {
 
         <form className="auth-card" onSubmit={submit}>
           <div className="segmented">
-            <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
+            <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setOtpSent(false); }}>
               Login
             </button>
-            <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>
+            <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setOtpSent(false); }}>
               Signup
+            </button>
+            <button type="button" className={mode === "otp" ? "active" : ""} onClick={() => { setMode("otp"); setOtpSent(false); }}>
+              OTP
             </button>
           </div>
 
@@ -295,14 +320,23 @@ function AuthPage({ onLogin, message, setMessage }) {
             Email
             <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
           </label>
-          <label>
-            Password
-            <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required minLength={6} />
-          </label>
+          {mode !== "otp" && (
+            <label>
+              Password
+              <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required minLength={6} />
+            </label>
+          )}
+
+          {mode === "otp" && otpSent && (
+            <label>
+              OTP
+              <input value={otpCode} onChange={(event) => setOtpCode(event.target.value)} required maxLength={6} pattern="[0-9]{6}" />
+            </label>
+          )}
 
           {message && <p className="form-message">{message}</p>}
           <button className="primary-button" type="submit">
-            {mode === "login" ? "Login" : "Create account"}
+            {mode === "login" ? "Login" : mode === "signup" ? "Create account" : otpSent ? "Verify OTP" : "Send OTP"}
           </button>
         </form>
       </section>
