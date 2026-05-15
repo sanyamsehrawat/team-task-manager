@@ -257,19 +257,60 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true, message: "Team Task Manager API is running" });
 });
 
+const adminProtectedSignupSchema = z.object({
+  adminUsername: z.string().min(1),
+  adminPassword: z.string().min(1),
+
+  name: z.string().trim().min(2),
+
+  email: z.string().trim().email(),
+
+  password: z.string().min(6),
+
+  role: z.enum(["admin", "member"]).default("member")
+});
+
 app.post(
   "/api/auth/signup",
   asyncHandler(async (req, res) => {
-    const data = signupSchema.parse(req.body);
+    const data = adminProtectedSignupSchema.parse(req.body);
+
+    // VERIFY ADMIN CREDENTIALS
+    if (
+      data.adminUsername !== process.env.ADMIN_SIGNUP_USERNAME ||
+      data.adminPassword !== process.env.ADMIN_SIGNUP_PASSWORD
+    ) {
+      return res.status(403).json({
+        message: "Invalid admin credentials"
+      });
+    }
+
+    // CHECK EXISTING USER
+    const existingUser = await User.findOne({
+      email: data.email.toLowerCase()
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        message: "Email already exists"
+      });
+    }
+
+    // HASH PASSWORD
     const passwordHash = await bcrypt.hash(data.password, 10);
+
+    // CREATE USER
     const user = await User.create({
       name: data.name,
-      email: data.email,
+      email: data.email.toLowerCase(),
       passwordHash,
       role: data.role
     });
 
-    res.status(201).json({ token: tokenFor(user), user: user.safe() });
+    res.status(201).json({
+      token: tokenFor(user),
+      user: user.safe()
+    });
   })
 );
 
