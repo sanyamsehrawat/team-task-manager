@@ -55,6 +55,8 @@ export default function App() {
   const [taskForm, setTaskForm] = useState(emptyTask);
   const [loading, setLoading] = useState(Boolean(getToken()));
   const [message, setMessage] = useState("");
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
 
   const isAdmin = user?.role === "admin";
 
