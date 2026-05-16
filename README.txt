@@ -38,7 +38,7 @@ Backend health check:
 http://localhost:5000/api/health
 
 How To Use
-1. Signup as Admin.
+1. Signup as Admin. (Adminuserid:admin;adminpassword:admin123)
 2. Signup another account as Member.
 3. Login as Admin.
 4. Create a project and select members.
