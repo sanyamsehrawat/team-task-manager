@@ -55,8 +55,6 @@ export default function App() {
   const [taskForm, setTaskForm] = useState(emptyTask);
   const [loading, setLoading] = useState(Boolean(getToken()));
   const [message, setMessage] = useState("");
-  const [adminUsername, setAdminUsername] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
 
   const isAdmin = user?.role === "admin";
 
@@ -236,39 +234,27 @@ export default function App() {
 
 function AuthPage({ onLogin, message, setMessage }) {
   const [mode, setMode] = useState("login");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     role: "member"
   });
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
 
   async function submit(event) {
     event.preventDefault();
     setMessage("");
+
+    if (mode === "signup") {
+      if (adminUsername !== "admin" || adminPassword !== "admin123") {
+        setMessage("Invalid admin credentials. Only an admin can register new accounts.");
+        return;
+      }
+    }
+
     try {
-      if (mode === "otp" && !otpSent) {
-        const data = await api("/auth/request-otp", {
-          method: "POST",
-          body: { email: form.email }
-        });
-        setOtpSent(true);
-        setMessage(data.demoOtp ? `Demo OTP: ${data.demoOtp}` : data.message);
-        return;
-      }
-
-      if (mode === "otp") {
-        const data = await api("/auth/verify-otp", {
-          method: "POST",
-          body: { email: form.email, otp: otpCode }
-        });
-        setToken(data.token);
-        await onLogin();
-        return;
-      }
-
       const data = await api(mode === "login" ? "/auth/login" : "/auth/signup", {
         method: "POST",
         body: mode === "login" ? { email: form.email, password: form.password } : form
@@ -290,41 +276,39 @@ function AuthPage({ onLogin, message, setMessage }) {
         </div>
 
         <form className="auth-card" onSubmit={submit}>
-          <div className="segmented">
-            <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setOtpSent(false); }}>
+          <div className="segmented" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+            <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
               Login
             </button>
-            <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setOtpSent(false); }}>
+            <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>
               Signup
-            </button>
-            <button type="button" className={mode === "otp" ? "active" : ""} onClick={() => { setMode("otp"); setOtpSent(false); }}>
-              OTP
             </button>
           </div>
 
           {mode === "signup" && (
             <>
               <label>
+                Admin Username
+                <input
+                  type="text"
+                  value={adminUsername}
+                  onChange={(e) => setAdminUsername(e.target.value)}
+                  placeholder="Enter admin username"
+                  required
+                />
+              </label>
+              <label>
+                Admin Password
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  required
+                />
+              </label>
+              <label>
                 Name
-                <div>
-  <label>Admin Username</label>
-  <input
-    type="text"
-    value={adminUsername}
-    onChange={(e) => setAdminUsername(e.target.value)}
-    required
-  />
-</div>
-
-<div>
-  <label>Admin Password</label>
-  <input
-    type="password"
-    value={adminPassword}
-    onChange={(e) => setAdminPassword(e.target.value)}
-    required
-  />
-</div>
                 <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
               </label>
               <label>
@@ -341,23 +325,14 @@ function AuthPage({ onLogin, message, setMessage }) {
             Email
             <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
           </label>
-          {mode !== "otp" && (
-            <label>
-              Password
-              <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required minLength={6} />
-            </label>
-          )}
-
-          {mode === "otp" && otpSent && (
-            <label>
-              OTP
-              <input value={otpCode} onChange={(event) => setOtpCode(event.target.value)} required maxLength={6} pattern="[0-9]{6}" />
-            </label>
-          )}
+          <label>
+            Password
+            <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required minLength={6} />
+          </label>
 
           {message && <p className="form-message">{message}</p>}
           <button className="primary-button" type="submit">
-            {mode === "login" ? "Login" : mode === "signup" ? "Create account" : otpSent ? "Verify OTP" : "Send OTP"}
+            {mode === "login" ? "Login" : "Create account"}
           </button>
         </form>
       </section>
